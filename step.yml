@@ -1,0 +1,58 @@
+title: Set Git Credentials
+summary: Sets the Git user name and email address used by subsequent Steps in the Workflow.
+description: |-
+  Sets the global Git identity (`user.name` and `user.email`) on the build machine, so every subsequent Step that creates Git commits or tags uses it as the author.
+
+  ### Configuring the Step
+
+  1. Set the **Git Username** input to the name to use as the Git commit author.
+  2. Set the **Git Email Address** input to the email address to use as the Git commit author.
+
+  Both values are written to the global Git config (`git config --global`), so they apply to every repository on the build machine for the rest of the build.
+
+  ### Troubleshooting
+
+  If commits created by later Steps still show a different author, check whether the repository's local Git config or the Step creating the commit overrides `user.name` or `user.email`. Local Git config takes precedence over the global one set by this Step.
+
+  ### Useful links
+
+  - [git-config documentation](https://git-scm.com/docs/git-config)
+
+  ### Related Steps
+
+  - [Git Clone Repository](https://www.bitrise.io/integrations/steps/git-clone)
+  - [Script](https://www.bitrise.io/integrations/steps/script)
+website: https://github.com/bitrise-steplib/bitrise-step-set-git-credentials
+source_code_url: https://github.com/bitrise-steplib/bitrise-step-set-git-credentials
+support_url: https://github.com/bitrise-steplib/bitrise-step-set-git-credentials/issues
+
+type_tags:
+- utility
+
+is_requires_admin_user: false
+is_always_run: false
+is_skippable: false
+
+deps:
+  brew:
+  - name: git
+  apt_get:
+  - name: git
+
+toolkit:
+  bash:
+    entry_file: step.sh
+
+inputs:
+- git_user_name: Bitrise Buildbot
+  opts:
+    title: Git Username
+    summary: The name to set as the Git commit author (`user.name`).
+    description: The name to set as the Git commit author. It is written to the global Git config as `user.name`.
+    is_required: true
+- git_email_address:
+  opts:
+    title: Git Email Address
+    summary: The email address to set as the Git commit author (`user.email`).
+    description: The email address to set as the Git commit author. It is written to the global Git config as `user.email`.
+    is_required: true

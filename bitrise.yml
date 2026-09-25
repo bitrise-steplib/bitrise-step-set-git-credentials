@@ -1,0 +1,76 @@
+format_version: "11"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+
+# Use individual step checks instead of the shared `check` workflow, as we want bash only checks.
+include:
+- repository: steps-check
+  branch: master
+  path: yamlfmt.bitrise.yml
+- repository: steps-check
+  branch: master
+  path: step-metadata.bitrise.yml
+
+workflows:
+  check:
+    description: Runs the shared static checks (yamlfmt, step.yml audit, README generation) and shellcheck.
+    steps:
+    - bundle::yamlfmt: {}
+    - bundle::step-yml-audit: {}
+    - script:
+        title: shellcheck
+        deps:
+          brew:
+          - name: shellcheck
+          apt_get:
+          - name: shellcheck
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            shellcheck --shell=bash step.sh
+    - git::https://github.com/bitrise-steplib/steps-readme-generator.git@main:
+        inputs:
+        - example_section: docs/examples.md
+    - autofix-ci@1:
+        inputs:
+        - git_remote_url: $BITRISEIO_BASE_REPOSITORY_URL # default URL detection doesn't work because of Unified CI
+        - git_token: $PIPELINE_GITHUB_ACCESS_TOKEN # defined as a secret in Unified CI project
+
+  e2e:
+    steps:
+    - git::https://github.com/bitrise-steplib/steps-check.git:
+        inputs:
+        - workflow: e2e
+
+  sample:
+    description: |-
+      Runs the Step against a throwaway global Git config and prints the result.
+      Remove the first Step to apply the identity to your real global Git config.
+    steps:
+    - script:
+        title: Isolate global Git config
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            config_file="$(mktemp -d)/gitconfig"
+            envman add --key GIT_CONFIG_GLOBAL --value "$config_file"
+            echo "Global Git config redirected to: $config_file"
+    - path::./:
+        title: Set Git Credentials
+        inputs:
+        - git_user_name: Bitrise Buildbot
+        - git_email_address: buildbot@example.com
+    - script:
+        title: Print the global Git identity
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            git config --global --list
+
+  generate_readme:
+    steps:
+    - git::https://github.com/bitrise-steplib/steps-readme-generator.git@main:
+        inputs:
+        - example_section: docs/examples.md

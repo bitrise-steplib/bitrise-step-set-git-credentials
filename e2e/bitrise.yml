@@ -1,0 +1,105 @@
+format_version: "11"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+
+app:
+  envs:
+  - TEST_EMAIL_ADDRESS: test-git-email@example.com
+
+step_bundles:
+  # The Step writes the global Git config. Redirect it to a throwaway file, so running the tests
+  # locally does not overwrite the developer's own Git identity.
+  isolate_git_config:
+    steps:
+    - script:
+        title: Isolate global Git config
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            config_file="$(mktemp -d)/gitconfig"
+            envman add --key GIT_CONFIG_GLOBAL --value "$config_file"
+            echo "Global Git config redirected to: $config_file"
+
+  # Asserts the global Git identity, and that a commit created by a subsequent Step picks it up.
+  verify_git_identity:
+    inputs:
+    - expected_user_name: ""
+    - expected_email_address: ""
+    steps:
+    - script:
+        title: Verify the Git identity
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+
+            actual_user_name="$(git config --global user.name)"
+            actual_email_address="$(git config --global user.email)"
+            echo "user.name:  '$actual_user_name' (expected: '$expected_user_name')"
+            echo "user.email: '$actual_email_address' (expected: '$expected_email_address')"
+            if [[ "$actual_user_name" != "$expected_user_name" ]]; then
+              echo "user.name does not match!"
+              exit 1
+            fi
+            if [[ "$actual_email_address" != "$expected_email_address" ]]; then
+              echo "user.email does not match!"
+              exit 1
+            fi
+
+            repo_dir="$(mktemp -d)"
+            git -C "$repo_dir" init --quiet
+            git -C "$repo_dir" commit --quiet --allow-empty --message "Commit created by the e2e test"
+            actual_author="$(git -C "$repo_dir" log -1 --format='%an <%ae>')"
+            expected_author="$expected_user_name <$expected_email_address>"
+            echo "Commit author: '$actual_author' (expected: '$expected_author')"
+            if [[ "$actual_author" != "$expected_author" ]]; then
+              echo "Commit author does not match!"
+              exit 1
+            fi
+
+workflows:
+  test_custom_credentials:
+    steps:
+    - bundle::isolate_git_config: {}
+    - path::./:
+        title: Set Git Credentials
+        inputs:
+        - git_user_name: Test Git Username
+        - git_email_address: $TEST_EMAIL_ADDRESS
+    - bundle::verify_git_identity:
+        inputs:
+        - expected_user_name: Test Git Username
+        - expected_email_address: $TEST_EMAIL_ADDRESS
+
+  test_default_user_name:
+    steps:
+    - bundle::isolate_git_config: {}
+    - path::./:
+        title: Set Git Credentials
+        inputs:
+        - git_email_address: $TEST_EMAIL_ADDRESS
+    - bundle::verify_git_identity:
+        inputs:
+        - expected_user_name: Bitrise Buildbot
+        - expected_email_address: $TEST_EMAIL_ADDRESS
+
+  test_overrides_existing_identity:
+    steps:
+    - bundle::isolate_git_config: {}
+    - script:
+        title: Set a pre-existing Git identity
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            git config --global user.name "Previous User"
+            git config --global user.email "previous@example.com"
+    - path::./:
+        title: Set Git Credentials
+        inputs:
+        - git_user_name: New User
+        - git_email_address: $TEST_EMAIL_ADDRESS
+    - bundle::verify_git_identity:
+        inputs:
+        - expected_user_name: New User
+        - expected_email_address: $TEST_EMAIL_ADDRESS
